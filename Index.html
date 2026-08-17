@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Leads Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 sm:p-8">
+
+    <div class="max-w-5xl mx-auto">
+        <!-- Título -->
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-gray-800">Gestor de Leads</h1>
+            <p class="text-gray-600 mt-1">Importa capturas, gestiona estados (N.C: Amarillo, K.O: Rojo, O.K: Verde) y comparte tus contactos</p>
+        </header>
+
+        <!-- Sección de Importación por Imagen (OCR) -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8 border-2 border-dashed border-blue-200">
+            <h2 class="text-xl font-semibold text-gray-700 mb-2">📸 Importar Leads desde Captura de Pantalla</h2>
+            <p class="text-sm text-gray-500 mb-4">Sube una imagen con nombres y teléfonos. Se registrarán automáticamente con la fecha de hoy y estado N.C.</p>
+            
+            <div class="flex flex-col sm:flex-row items-center gap-4">
+                <input type="file" id="imagenInput" accept="image/*" 
+                    class="w-full sm:w-auto text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                <button type="button" onclick="procesarImagen()" id="btnProcesar" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2">
+                    ✨ Interpretar Captura
+                </button>
+            </div>
+            <div id="loadingOCR" class="hidden mt-4 text-blue-600 text-sm font-medium flex items-center gap-2">
+                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Leyendo imagen y extrayendo contactos... Por favor espera.
+            </div>
+        </div>
+
+        <!-- Formulario de Nuevo Lead Individual -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Añadir Nuevo Lead Manualmente</h2>
+            <form id="leadForm" class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                    <input type="text" id="nombre" required placeholder="Ej. Ana García" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                    <input type="tel" id="telefono" required placeholder="Ej. 600123456" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Estado Inicial</label>
+                    <select id="estado" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="N.C.">N.C. (No Contactado)</option>
+                        <option value="O.K">O.K (Éxito / Venta)</option>
+                        <option value="K.O">K.O (Descartado)</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200">
+                        Añadir Lead
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Listado, Filtros y Compartir -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                <h2 class="text-xl font-semibold text-gray-700">Listado de Contactos</h2>
+                
+                <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                    <!-- Botón Compartir -->
+                    <button onclick="copiarListado()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center gap-2">
+                        📋 Copiar Listado Completo
+                    </button>
+
+                    <!-- Filtro por Estado -->
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium text-gray-600">Filtrar:</span>
+                        <select id="filtroEstado" onchange="renderizarLeads()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="TODOS">Todos</option>
+                            <option value="N.C.">N.C.</option>
+                            <option value="O.K">O.K</option>
+                            <option value="K.O">K.O</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabla de Leads -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-gray-200 text-gray-600 text-sm">
+                            <th class="py-3 px-4">Fecha</th>
+                            <th class="py-3 px-4">Nombre</th>
+                            <th class="py-3 px-4">Teléfono</th>
+                            <th class="py-3 px-4">Estado Actual</th>
+                            <th class="py-3 px-4 text-center">WhatsApp / Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaLeads" class="divide-y divide-gray-100 text-gray-700">
+                        <!-- Leads inyectados por JS -->
+                    </tbody>
+                </table>
+                <div id="sinLeads" class="hidden text-center py-8 text-gray-500">
+                    No hay leads registrados con este filtro.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script de Lógica -->
+    <script>
+        let leads = JSON.parse(localStorage.getItem('leads')) || [];
+
+        const leadForm = document.getElementById('leadForm');
+        const tablaLeads = document.getElementById('tablaLeads');
+        const sinLeads = document.getElementById('sinLeads');
+        const filtroEstado = document.getElementById('filtroEstado');
+
+        function obtenerFechaActual() {
+            const hoy = new Date();
+            const dia = String(hoy.getDate()).padStart(2, '0');
+            const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+            const anio = hoy.getFullYear();
+            return `${dia}/${mes}/${anio}`;
+        }
+
+        leadForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const nuevoLead = {
+                id: Date.now() + Math.random(),
+                fecha: obtenerFechaActual(),
+                nombre: document.getElementById('nombre').value.trim(),
+                telefono: document.getElementById('telefono').value.trim(),
+                estado: document.getElementById('estado').value
+            };
+
+            leads.push(nuevoLead);
+            guardarYRenderizar();
+            leadForm.reset();
+        });
+
+        function guardarYRenderizar() {
+            localStorage.setItem('leads', JSON.stringify(leads));
+            renderizarLeads();
+        }
+
+        function cambiarEstado(id, nuevoEstado) {
+            const lead = leads.find(l => l.id === id);
+            if (lead) {
+                lead.estado = nuevoEstado;
+                guardarYRenderizar();
+            }
+        }
+
+        function eliminarLead(id) {
+            if (confirm('¿Estás seguro de que deseas eliminar este contacto?')) {
+                leads = leads.filter(l => l.id !== id);
+                guardarYRenderizar();
+            }
+        }
+
+        function enviarWhatsAppIndividual(telefono, nombre) {
+            let telLimpio = telefono.replace(/\D/g, '');
+            let mensaje = prompt(`Enviar WhatsApp a ${nombre} (${telefono}):`, `Hola ${nombre}, te contacto desde...`);
+            if (mensaje !== null) {
+                let url = `https://wa.me/${telLimpio}?text=${encodeURIComponent(mensaje)}`;
+                window.open(url, '_blank');
+            }
+        }
+
+        async function procesarImagen() {
+            const input = document.getElementById('imagenInput');
+            const loading = document.getElementById('loadingOCR');
+            const btn = document.getElementById('btnProcesar');
+
+            if (input.files.length === 0) {
+                alert('Por favor, selecciona o sube una imagen primero.');
+                return;
+            }
+
+            const archivo = input.files[0];
+            loading.classList.remove('hidden');
+            btn.disabled = true;
+
+            try {
+                const resultado = await Tesseract.recognize(archivo, 'spa+eng', {
+                    logger: m => console.log(m)
+                });
+
+                const texto = resultado.data.text;
+                analizarTextoYExtraerLeads(texto);
+            } catch (error) {
+                console.error(error);
+                alert('Hubo un error al leer la imagen.');
+            } finally {
+                loading.classList.add('hidden');
+                btn.disabled = false;
+                input.value = '';
+            }
+        }
+
+        function analizarTextoYExtraerLeads(texto) {
+            const lineas = texto.split('\n');
+            let anadidos = 0;
+            const regexTelefono = /(?:\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s-]?\d{3,4}[\s-]?\d{3,4}/g;
+            const fechaHoy = obtenerFechaActual();
+
+            lineas.forEach(linea => {
+                linea = linea.trim();
+                if (!linea) return;
+
+                const coincidenciasTel = linea.match(regexTelefono);
+                if (coincidenciasTel && coincidenciasTel.length > 0) {
+                    const telefono = coincidenciasTel[0].trim();
+                    let nombre = linea.replace(telefono, '').trim();
+                    
+                    nombre = nombre.replace(/[\(\)|:,-]/g, '').trim();
+                    if (!nombre || nombre.length < 2) {
+                        nombre = "Contacto Captura";
+                    }
+
+                    const existe = leads.some(l => l.telefono.replace(/\s+/g, '') === telefono.replace(/\s+/g, ''));
+                    if (!existe) {
+                        leads.push({
+                            id: Date.now() + Math.random(),
+                            fecha: fechaHoy,
+                            nombre: nombre,
+                            telefono: telefono,
+                            estado: 'N.C.'
+                        });
+                        anadidos++;
+                    }
+                }
+            });
+
+            if (anadidos > 0) {
+                guardarYRenderizar();
+                alert(`¡Se han importado ${anadidos} leads de la imagen con fecha de hoy (${fechaHoy})!`);
+            } else {
+                alert('No se pudieron detectar números de teléfono claros en la imagen.');
+            }
+        }
+
+        function copiarListado() {
+            if (leads.length === 0) {
+                alert('No hay leads para compartir.');
+                return;
+            }
+
+            let textoCompartir = "📊 *LISTADO DE LEADS*\n\n";
+            leads.forEach((lead, index) => {
+                const fechaStr = lead.fecha ? `[${lead.fecha}] ` : '';
+                textoCompartir += `${index + 1}. ${fechaStr}*${lead.nombre}* - Tel: ${lead.telefono} [${lead.estado}]\n`;
+            });
+
+            navigator.clipboard.writeText(textoCompartir).then(() => {
+                alert('¡Listado copiado al portapapeles!');
+            }).catch(err => {
+                console.error('Error al copiar: ', err);
+            });
+        }
+
+        function renderizarLeads() {
+            const filtro = filtroEstado.value;
+            tablaLeads.innerHTML = '';
+
+            const leadsFiltrados = leads.filter(lead => {
+                if (filtro === 'TODOS') return true;
+                return lead.estado === filtro;
+            });
+
+            if (leadsFiltrados.length === 0) {
+                sinLeads.classList.remove('hidden');
+                return;
+            } else {
+                sinLeads.classList.add('hidden');
+            }
+
+            leadsFiltrados.forEach(lead => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-gray-50 transition duration-150';
+
+                // Asignación de colores exactos solicitados (N.C: Amarillo, K.O: Rojo, O.K: Verde)
+                let badgeColor = '';
+                if (lead.estado === 'N.C.') badgeColor = 'bg-yellow-400 text-yellow-950';
+                if (lead.estado === 'O.K') badgeColor = 'bg-green-500 text-white';
+                if (lead.estado === 'K.O') badgeColor = 'bg-red-500 text-white';
+
+                const fechaMostrar = lead.fecha || 'Sin fecha';
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-sm text-gray-500">${fechaMostrar}</td>
+                    <td class="py-3 px-4 font-medium">${lead.nombre}</td>
+                    <td class="py-3 px-4">
+                        <a href="tel:${lead.telefono}" class="text-blue-600 hover:underline">${lead.telefono}</a>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="inline-block px-3 py-1 text-xs font-bold rounded-full ${badgeColor}">
+                            ${lead.estado}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        <div class="inline-flex items-center justify-center gap-2">
+                            <!-- Botón WhatsApp Individual -->
+                            <button onclick="enviarWhatsAppIndividual('${lead.telefono}', '${lead.nombre.replace(/'/g, "\\'")}')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-2.5 py-1.5 rounded font-medium flex items-center gap-1" title="Enviar WhatsApp">
+                                💬 WhatsApp
+                            </button>
+
+                            <!-- Selector de Estado -->
+                            <select onchange="cambiarEstado(${lead.id}, this.value)" class="text-xs border border-gray-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+                                <option value="N.C." ${lead.estado === 'N.C.' ? 'selected' : ''}>N.C.</option>
+                                <option value="O.K" ${lead.estado === 'O.K' ? 'selected' : ''}>O.K</option>
+                                <option value="K.O" ${lead.estado === 'K.O' ? 'selected' : ''}>K.O</option>
+                            </select>
+
+                            <!-- Botón Borrar -->
+                            <button onclick="eliminarLead(${lead.id})" class="text-red-500 hover:text-red-700 text-sm p-1" title="Eliminar">
+                                🗑️
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tablaLeads.appendChild(tr);
+            });
+        }
+
+        renderizarLeads();
+    </script>
+</body>
+</html>
